@@ -35,10 +35,16 @@ parser = argparse.ArgumentParser(description="Description of your script.")
 
 # Add arguments
 parser.add_argument('--config_path', type=str, help="配置文件", default="config/config.yaml")
+parser.add_argument("--port", type=int, default=8034, help="Port to run the server on")
+parser.add_argument("--workers", type=int, default=1, help="Number of worker processes")
+parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind to")
 
 # Parse arguments
 args = parser.parse_args()
 config_path = args.config_path
+port = args.port
+workers = args.workers
+host = args.host
 
 
 app = FastAPI()
@@ -135,16 +141,7 @@ def get_lan_ip():
     except Exception as e:
         return "无法获取IP: " + str(e)
 
-def parse_args():
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=5001, help="Port to run the server on")
-    parser.add_argument("--workers", type=int, default=1, help="Number of worker processes")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind to")
-    return parser.parse_args()
-
 if __name__ == "__main__":
-    args = parse_args()
     lan_ip = get_lan_ip()
     print(f"\n请在局域网中使用以下地址访问:")
     print(f"https://{lan_ip}:8034\n")
