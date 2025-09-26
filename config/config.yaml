@@ -16,7 +16,7 @@ selected_module:
   ASR: FunASR
   VAD: SileroVAD
   LLM: OpenAILLM
-  TTS: KOKOROTTS
+  TTS: CosyVoiceTTS
   Player: WebSocketPlayer
 
 Recorder:
@@ -61,6 +61,7 @@ TTS:
   CosyVoiceTTS:
     api_url: http://localhost:5001  # CosyVoice API服务地址
     output_file: tmp/
+    file_path: tmp/cosyvoice_generate.wav
     voice_type: "0"  # 语音类型，默认为0
     reference_text: "今天有一张票是8662893339721，乘客叫罗婉晴，是银川到南宁的BK33号。你帮我看一下这个是不是取消保护到了3036。对银川到南宁的3162,6月21号。"  # 参考文本
     prompt_audio_path: "/home/octopus/data/rwq/voice_generate/data/yxf_v1_cut.wav"  # 提示音频路径
