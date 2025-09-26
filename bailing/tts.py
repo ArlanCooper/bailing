@@ -4,6 +4,8 @@ import os
 import subprocess
 import time
 import uuid
+import requests
+import json
 from abc import ABC, ABCMeta, abstractmethod
 from datetime import datetime
 from gtts import gTTS
@@ -293,6 +295,168 @@ class KOKOROTTS(AbstractTTS):
         except Exception as e:
             logger.error(f"[KOKOROTTS] Failed to generate TTS: {e}")
             return ""
+
+
+class CosyVoiceTTS(AbstractTTS):
+    """
+    CosyVoice TTS服务实现
+    基于实际的CosyVoice API接口
+    """
+    
+    def __init__(self, config):
+        """
+        初始化CosyVoice TTS服务
+        
+        config keys:
+          - api_url: CosyVoice API服务地址 (默认: http://localhost:5001)
+          - output_file: 输出文件目录
+          - voice_type: 语音类型 (默认: "0")
+          - reference_text: 参考文本 (默认: 示例文本)
+          - prompt_audio_path: 提示音频文件路径
+          - stream: 是否流式输出 (默认: False)
+          - timeout: 请求超时时间 (默认: 30秒)
+        """
+        self.api_url = config.get("api_url", "http://localhost:5001")
+        self.output_file = config.get("output_file", "tmp/")
+        self.voice_type = config.get("voice_type", "0")
+        self.reference_text = config.get("reference_text", 
+            "今天有一张票是8662893339721，乘客叫罗婉晴，是银川到南宁的BK33号。你帮我看一下这个是不是取消保护到了3036。对银川到南宁的3162,6月21号。")
+        self.prompt_audio_path = config.get("prompt_audio_path", 
+            "/home/octopus/data/rwq/voice_generate/data/yxf_v1_cut.wav")
+        self.stream = config.get("stream", False)
+        self.timeout = config.get("timeout", 30)
+        
+        # 确保输出目录存在
+        os.makedirs(self.output_file, exist_ok=True)
+        
+        # 验证API服务是否可用
+        self._check_api_availability()
+
+    def _check_api_availability(self):
+        """检查CosyVoice API服务是否可用"""
+        try:
+            response = requests.get(f"{self.api_url}/health", timeout=5)
+            if response.status_code == 200:
+                logger.info("CosyVoice API服务连接成功")
+            else:
+                logger.warning(f"CosyVoice API服务响应异常: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"无法连接到CosyVoice API服务: {e}")
+            raise ConnectionError(f"CosyVoice API服务不可用: {e}")
+
+    def _generate_filename(self, extension=".wav"):
+        """生成输出文件名"""
+        return os.path.join(self.output_file, f"tts-{datetime.now().date()}@{uuid.uuid4().hex}{extension}")
+
+    def _log_execution_time(self, start_time):
+        """记录执行时间"""
+        end_time = time.time()
+        execution_time = end_time - start_time
+        logger.debug(f"CosyVoice TTS执行时间: {execution_time:.2f} 秒")
+
+    def _prepare_request_data(self, text):
+        """准备请求数据"""
+        data = {
+            "text": text,
+            "voice_type": self.voice_type,
+            "reference_text": self.reference_text,
+            "prompt_audio_path": self.prompt_audio_path,
+            "stream": self.stream
+        }
+        
+        return data
+
+    def _save_audio_response(self, response, output_file):
+        """保存音频响应到文件"""
+        try:
+            with open(output_file, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            return True
+        except Exception as e:
+            logger.error(f"保存音频文件失败: {e}")
+            return False
+
+    def to_tts(self, text: str) -> str:
+        """
+        将文本转换为语音
+        
+        Args:
+            text (str): 要转换的文本
+            
+        Returns:
+            str: 生成的音频文件路径，失败时返回空字符串（与KOKOROTTS保持一致）
+        """
+        if not text or not text.strip():
+            logger.warning("输入文本为空")
+            return ""
+            
+        output_file = self._generate_filename(".wav")
+        start_time = time.time()
+        
+        try:
+            # 准备请求数据
+            data = self._prepare_request_data(text)
+            
+            # 发送请求到CosyVoice API
+            response = requests.post(
+                f"{self.api_url}/generate_voice",
+                json=data,
+                timeout=self.timeout,
+                stream=self.stream
+            )
+            
+            # 检查响应状态
+            if response.status_code == 200:
+                # 保存音频文件
+                if self._save_audio_response(response, output_file):
+                    self._log_execution_time(start_time)
+                    logger.info(f"CosyVoice TTS生成成功: {output_file}")
+                    return output_file
+                else:
+                    logger.error("保存音频文件失败")
+                    return ""
+            elif response.status_code == 400:
+                error_msg = response.json().get("message", "请求参数不正确")
+                logger.error(f"CosyVoice API参数错误: {error_msg}")
+                return ""
+            elif response.status_code == 500:
+                error_msg = response.json().get("message", "服务器生成音频失败")
+                logger.error(f"CosyVoice API服务器错误: {error_msg}")
+                return ""
+            else:
+                logger.error(f"CosyVoice API请求失败: {response.status_code}")
+                return ""
+                
+        except requests.exceptions.Timeout:
+            logger.error("CosyVoice API请求超时")
+            return ""
+        except requests.exceptions.ConnectionError:
+            logger.error("无法连接到CosyVoice API服务")
+            return ""
+        except Exception as e:
+            logger.error(f"CosyVoice TTS生成失败: {e}")
+            return ""
+
+    def get_available_speakers(self):
+        """
+        获取可用的音色列表
+        
+        Returns:
+            list: 可用音色列表，失败时返回空列表
+        """
+        try:
+            response = requests.get(f"{self.api_url}/sft_spk", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("available_spks", [])
+            else:
+                logger.error(f"获取音色列表失败: {response.status_code}")
+                return []
+        except Exception as e:
+            logger.error(f"获取音色列表异常: {e}")
+            return []
 
 
 def create_instance(class_name, *args, **kwargs):

@@ -135,19 +135,25 @@ def get_lan_ip():
     except Exception as e:
         return "无法获取IP: " + str(e)
 
+def parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=5001, help="Port to run the server on")
+    parser.add_argument("--workers", type=int, default=1, help="Number of worker processes")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind to")
+    return parser.parse_args()
 
 if __name__ == "__main__":
+    args = parse_args()
     lan_ip = get_lan_ip()
     print(f"\n请在局域网中使用以下地址访问:")
-    print(f"https://{lan_ip}:8000\n")
+    print(f"https://{lan_ip}:8034\n")
     # 生成自签名证书 (开发环境)
     # openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=8000,
-        ssl_keyfile="./key.pem",  # 可选：添加自签名证书
-        ssl_certfile="./cert.pem",
+        host=args.host,
+        port=args.port,
         ws_ping_interval=20,
-        ws_ping_timeout=30
+        ws_ping_timeout=100
     )
